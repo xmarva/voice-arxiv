@@ -1,6 +1,6 @@
 import logging
 import logging.config
-from config.settings import settings
+from src.config.settings import settings
 
 LOGGING_CONFIG = {
     'version': 1,

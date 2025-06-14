@@ -1,7 +1,7 @@
 import logging
 import weaviate
 from typing import List, Dict, Any, Optional
-from config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

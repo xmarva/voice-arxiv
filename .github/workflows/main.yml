@@ -20,7 +20,6 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
         pip install -r requirements-dev.txt
         
     - name: Run pre-commit
@@ -42,7 +41,6 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
         pip install -r requirements-dev.txt
         
     - name: Install project in development mode
@@ -77,7 +75,29 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Build application
+    - name: Build Python package
       run: |
-        # Add your build commands here
-        echo "Building application..."
+        python setup.py sdist bdist_wheel
+        
+    - name: Build Docker image
+      run: |
+        docker build -t voice-arxiv:latest -f infrastructure/docker/Dockerfile .
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: infrastructure/docker/Dockerfile
+        push: true
+        tags: |
+          ${{ secrets.DOCKERHUB_USERNAME }}/voice-arxiv:latest
+          ${{ secrets.DOCKERHUB_USERNAME }}/voice-arxiv:${{ github.sha }}

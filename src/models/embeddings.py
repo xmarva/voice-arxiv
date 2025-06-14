@@ -3,7 +3,7 @@ from typing import List
 from langchain.embeddings.base import Embeddings
 from transformers import AutoTokenizer, AutoModel
 import torch
-from config.settings import settings
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 

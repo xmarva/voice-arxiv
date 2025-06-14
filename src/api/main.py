@@ -4,9 +4,14 @@ from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import PlainTextResponse
-from config.logging_config import setup_logging
+
+from src.config.logging_config import setup_logging
 from src.monitoring.metrics import get_metrics, metrics_collector
 from src.api.routes import router
+from src.config.settings import settings
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 setup_logging()
 logger = logging.getLogger(__name__)
