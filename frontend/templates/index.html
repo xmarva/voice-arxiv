@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research AI Assistant</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Research AI Assistant</h1>
+            <p>AI-powered research paper analysis and discovery</p>
+        </header>
+
+        <main>
+            <div class="search-section">
+                <div class="input-group">
+                    <input type="text" id="searchInput" placeholder="Ask about research papers..." />
+                    <button id="searchBtn">Search</button>
+                </div>
+                
+                <div class="pipeline-selector">
+                    <label>Pipeline:</label>
+                    <select id="pipelineSelect">
+                        <option value="simple">Simple Search</option>
+                        <option value="semantic">Semantic Analysis</option>
+                        <option value="summary">Summarization</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="results" class="results-section"></div>
+            
+            <div class="status-section">
+                <div class="status-item">
+                    <span>Papers in DB:</span>
+                    <span id="paperCount">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span>System Status:</span>
+                    <span id="systemStatus">Checking...</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
