@@ -8,8 +8,8 @@ Research paper analysis and discovery system using LangChain, Weaviate, and cust
 
 ```bash
 # Clone and setup
-git clone <repo>
-cd research-ai-assistant
+git clone git@github.com:xmarva/voice-arxiv.git
+cd voice-arxiv
 
 # Copy environment variables
 cp .env.example .env
@@ -23,7 +23,7 @@ chmod +x scripts/setup.sh
 ### 2. Start Services
 
 ```bash
-# Option 1: Docker Compose (Recommended)
+# Option 1: Docker Compose
 cd infrastructure/docker
 docker-compose up -d
 
@@ -31,7 +31,7 @@ docker-compose up -d
 python -m src.api.main
 ```
 
-### 3. Access Services
+### 3. Access Services Locally
 
 - **Application**: http://localhost:8000
 - **Grafana**: http://localhost:3000 (admin/admin)
