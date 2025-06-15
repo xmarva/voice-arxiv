@@ -1,3 +1,5 @@
+# src/database/weaviate_client.py
+
 import logging
 import weaviate
 from typing import List, Dict, Any, Optional
@@ -98,29 +100,22 @@ class WeaviateManager:
             logger.error(f"Failed to add papers: {e}")
             raise
     
-    @router.post("/search", response_model=SearchResponse)
-    @track_rag_pipeline("basic_search")
-    async def search_papers(request: SearchRequest):
+    def search_papers(self, query_vector: List[float], limit: int = 5) -> List[Dict[str, Any]]:
         try:
-            weaviate_manager = get_weaviate_manager()
-            embeddings_model = get_embeddings()
-            
-            # Получаем вектор запроса
-            query_vector = embeddings_model.embed_query(request.query)
-            
-            # Выполняем поиск
-            papers = weaviate_manager.search_papers(query_vector, request.limit)
-            
-            # Возвращаем результат
-            return {
-                "papers": papers,
-                "query": request.query,
-                "pipeline_type": request.pipeline_type
-            }
-        
+            result = (
+                self.client.query
+                .get(self.schema_name, ["title", "abstract", "authors", "arxiv_id", "categories"])
+                .with_near_vector({"vector": query_vector})
+                .with_limit(limit)
+                .with_additional(["distance"])
+                .do()
+            )
+            papers = result["data"]["Get"][self.schema_name]
+            logger.info(f"Found {len(papers)} papers for query")
+            return papers
         except Exception as e:
-            logger.error(f"Search error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"Failed to search papers: {e}")
+            return []
     
     def get_paper_count(self) -> int:
         try:
