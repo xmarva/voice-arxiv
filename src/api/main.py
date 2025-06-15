@@ -1,6 +1,6 @@
 import time
 import logging
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import PlainTextResponse
