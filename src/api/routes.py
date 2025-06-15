@@ -32,6 +32,7 @@ async def search_papers(request: SearchRequest):
         embeddings_model = get_embeddings()
         
         query_vector = embeddings_model.embed_query(request.query)
+        
         papers = weaviate_manager.search_papers(query_vector, request.limit)
         
         return SearchResponse(
