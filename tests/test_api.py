@@ -27,3 +27,12 @@ def test_search_endpoint(client):
     }
     response = client.post("/api/v1/search", json=search_data)
     assert response.status_code in [200, 500]
+    
+    if response.status_code == 200:
+        data = response.json()
+        assert "papers" in data
+        assert "query" in data
+        assert "pipeline_type" in data
+        assert data["query"] == search_data["query"]
+        assert data["pipeline_type"] == search_data["pipeline_type"]
+        assert len(data["papers"]) <= search_data["limit"]
