@@ -1,9 +1,8 @@
 # PaperAI
 
-![Home Screen](imgs/home.png)
-
 Research paper analysis and discovery system using LangChain, Weaviate, and custom LLM models. This is a project with a focus on infrastructure design, monitoring, and microservices.
 
+![Home Screen](imgs/home.png)
 ![Search Interface](imgs/search.png)
 
 ## Quick Start
