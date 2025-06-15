@@ -8,7 +8,7 @@ def read_requirements(filename):
 setup(
     name="voice-arxiv",
     version="0.1.0",
-    packages=find_packages(),
+    packages=find_packages(include=['src', 'src.*']),  # Явно указываем src
     install_requires=read_requirements('requirements.txt'),
     python_requires=">=3.10",
 )

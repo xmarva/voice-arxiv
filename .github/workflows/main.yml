@@ -36,6 +36,9 @@ jobs:
         pip install -e .
         
     - name: Run tests
+      env:
+        HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+        WEAVIATE_URL: "http://localhost:8080" 
       run: |
         pytest tests/
 
