@@ -22,6 +22,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
+    - name: Create __init__.py files
+      run: |
+        touch src/__init__.py
+        touch src/api/__init__.py
+        touch src/monitoring/__init__.py
+        touch src/database/__init__.py
+        touch src/models/__init__.py
+        touch src/config/__init__.py
+        
     - name: Install project in development mode
       run: |
         pip install -e .
