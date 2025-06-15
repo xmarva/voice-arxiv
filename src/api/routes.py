@@ -56,7 +56,7 @@ class PaperListResponse(BaseModel):
 @router.post("/search", response_model=SearchResponse)
 @track_rag_pipeline("search")
 async def search_papers(request: SearchRequest):
-    """Поиск и анализ статей по запросу пользователя"""
+    """Search and analyze papers based on user query"""
     try:
         rag_pipeline = get_rag_pipeline()
         result = rag_pipeline.process_query(request.query, request.limit)
@@ -72,13 +72,13 @@ async def search_papers(request: SearchRequest):
         return SearchResponse(
             papers=[],
             query=request.query,
-            result="К сожалению, не удалось обработать ваш запрос. Пожалуйста, попробуйте позже."
+            result="Unfortunately, we couldn't process your request. Please try again later."
         )
 
 @router.post("/paper-query", response_model=PaperQueryResponse)
 @track_rag_pipeline("paper_query")
 async def query_paper(request: PaperQueryRequest):
-    """Запрос к конкретной статье"""
+    """Query a specific paper"""
     try:
         rag_pipeline = get_rag_pipeline()
         result = rag_pipeline.process_single_paper(request.paper_id, request.query)
@@ -94,12 +94,12 @@ async def query_paper(request: PaperQueryRequest):
         return PaperQueryResponse(
             paper=None,
             query=request.query,
-            result=f"Произошла ошибка при обработке запроса: {str(e)}"
+            result=f"An error occurred while processing the query: {str(e)}"
         )
 
 @router.get("/stats", response_model=StatsResponse)
 def get_stats():
-    """Получить статистику системы"""
+    """Get system statistics"""
     try:
         weaviate_manager = get_weaviate_manager()
         paper_count = weaviate_manager.get_paper_count()
@@ -124,7 +124,7 @@ def _load_data_background(count: int, categories: Optional[str] = None):
 
 @router.post("/load-data")
 def load_sample_data(request: LoadDataRequest, background_tasks: BackgroundTasks):
-    """Загрузить данные из arXiv"""
+    """Load data from arXiv"""
     try:
         # Add the data loading task to background tasks
         background_tasks.add_task(_load_data_background, request.count, request.categories)
@@ -136,7 +136,7 @@ def load_sample_data(request: LoadDataRequest, background_tasks: BackgroundTasks
 @router.get("/papers", response_model=PaperListResponse)
 def list_papers(limit: int = Query(100, ge=1, le=1000), 
                      offset: int = Query(0, ge=0)):
-    """Получить список всех статей в базе"""
+    """Get a list of all papers in the database"""
     try:
         weaviate_manager = get_weaviate_manager()
         papers = weaviate_manager.list_papers(limit=limit, offset=offset)
@@ -157,23 +157,23 @@ async def upload_paper(
     authors: Optional[str] = Form(None),
     categories: Optional[str] = Form(None)
 ):
-    """Загрузить PDF-статью в базу данных"""
+    """Upload a PDF paper to the database"""
     try:
         weaviate_manager = get_weaviate_manager()
         embeddings_model = get_embeddings()
         
-        # Преобразуем строки авторов и категорий в списки
+        # Convert author and category strings to lists
         authors_list = authors.split(',') if authors else []
         categories_list = categories.split(',') if categories else []
         
-        # Получаем содержимое файла
+        # Get file contents
         content = ""
         if file.filename.endswith('.pdf'):
             try:
                 contents = await file.read()
                 pdf_file = io.BytesIO(contents)
                 
-                # Извлекаем текст из PDF
+                # Extract text from PDF
                 pdf_reader = PyPDF2.PdfReader(pdf_file)
                 for page_num in range(len(pdf_reader.pages)):
                     page = pdf_reader.pages[page_num]
@@ -182,10 +182,10 @@ async def upload_paper(
                 logger.error(f"Error extracting text from PDF: {e}")
                 raise HTTPException(status_code=400, detail=f"Could not process PDF: {e}")
         else:
-            # Для текстовых файлов просто считываем содержимое
+            # For text files, just read the content
             content = (await file.read()).decode('utf-8')
         
-        # Добавляем статью в базу
+        # Add paper to database
         success = weaviate_manager.add_paper_from_file(
             title=title,
             content=content,

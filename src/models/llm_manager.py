@@ -33,7 +33,7 @@ class SimpleLLM(LLM):
         
         try:
             # Extract the query from the prompt
-            query_match = re.search(r"Запрос: (.*?)(?:\n\n|$)", prompt, re.DOTALL)
+            query_match = re.search(r"Query: (.*?)(?:\n\n|$)", prompt, re.DOTALL)
             query = query_match.group(1).strip() if query_match else "Unknown query"
             
             # Extract paper information from the prompt
@@ -74,30 +74,30 @@ class SimpleLLM(LLM):
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             metrics_collector.stop_timer("llm_inference_time", start_time)
-            return "Извините, я не смог сгенерировать ответ на ваш запрос. Пожалуйста, попробуйте переформулировать вопрос."
+            return "I'm sorry, I couldn't generate a response to your query. Please try rephrasing your question."
     
     def _generate_summary_response(self, papers_info: List[Dict], query: str) -> str:
         """Generate a summary response based on the papers"""
         if not papers_info:
-            return "Я не нашел статей, соответствующих вашему запросу."
+            return "I couldn't find any papers matching your query."
         
-        response = f"На основе найденных статей, вот краткое резюме по вашему запросу '{query}':\n\n"
+        response = f"Based on the found papers, here's a brief summary for your query '{query}':\n\n"
         
         for i, paper in enumerate(papers_info[:3]):  # Limit to first 3 papers
-            response += f"**Статья {i+1}: {paper['title']}**\n"
+            response += f"**Paper {i+1}: {paper['title']}**\n"
             response += f"{paper['abstract']}\n\n"
         
         if len(papers_info) > 3:
-            response += f"Также найдено еще {len(papers_info) - 3} статей по этой теме.\n"
+            response += f"Also found {len(papers_info) - 3} more papers on this topic.\n"
         
         return response
     
     def _generate_explanation_response(self, papers_info: List[Dict], query: str) -> str:
         """Generate an explanation response based on the papers"""
         if not papers_info:
-            return "Я не нашел статей, которые могли бы помочь с объяснением по вашему запросу."
+            return "I couldn't find any papers that could help explain your query."
         
-        response = f"Вот объяснение по вашему запросу '{query}', основанное на научных статьях:\n\n"
+        response = f"Here's an explanation for your query '{query}', based on scientific papers:\n\n"
         
         # Extract relevant sentences from abstracts that might contain explanations
         explanations = []
@@ -110,63 +110,63 @@ class SimpleLLM(LLM):
         
         if explanations:
             response += "\n".join(explanations[:5])  # Limit to first 5 relevant sentences
-            response += f"\n\nЭто объяснение основано на статье \"{papers_info[0]['title']}\" авторов {papers_info[0]['authors']}."
+            response += f"\n\nThis explanation is based on the paper \"{papers_info[0]['title']}\" by {papers_info[0]['authors']}."
         else:
             # If no relevant sentences found, use the first paper's abstract
             response += f"{papers_info[0]['abstract']}\n\n"
-            response += f"Это информация из статьи \"{papers_info[0]['title']}\" авторов {papers_info[0]['authors']}."
+            response += f"This information is from the paper \"{papers_info[0]['title']}\" by {papers_info[0]['authors']}."
         
         return response
     
     def _generate_comparison_response(self, papers_info: List[Dict], query: str) -> str:
         """Generate a comparison response based on the papers"""
         if len(papers_info) < 2:
-            return "Для сравнения необходимо как минимум две статьи. Пожалуйста, уточните запрос."
+            return "At least two papers are needed for comparison. Please refine your query."
         
-        response = f"Сравнение по вашему запросу '{query}':\n\n"
+        response = f"Comparison for your query '{query}':\n\n"
         
-        response += f"**Статья 1: {papers_info[0]['title']}**\n"
-        response += f"Авторы: {papers_info[0]['authors']}\n"
-        response += f"Основные идеи: {papers_info[0]['abstract']}\n\n"
+        response += f"**Paper 1: {papers_info[0]['title']}**\n"
+        response += f"Authors: {papers_info[0]['authors']}\n"
+        response += f"Main ideas: {papers_info[0]['abstract']}\n\n"
         
-        response += f"**Статья 2: {papers_info[1]['title']}**\n"
-        response += f"Авторы: {papers_info[1]['authors']}\n"
-        response += f"Основные идеи: {papers_info[1]['abstract']}\n\n"
+        response += f"**Paper 2: {papers_info[1]['title']}**\n"
+        response += f"Authors: {papers_info[1]['authors']}\n"
+        response += f"Main ideas: {papers_info[1]['abstract']}\n\n"
         
-        response += "**Сравнение:**\n"
-        response += "Обе статьи относятся к области исследований искусственного интеллекта, но имеют разные подходы и фокус. "
-        response += "Первая статья больше сосредоточена на теоретических аспектах, в то время как вторая предлагает практическое применение технологий."
+        response += "**Comparison:**\n"
+        response += "Both papers are related to artificial intelligence research but have different approaches and focus. "
+        response += "The first paper concentrates more on theoretical aspects, while the second offers practical applications of the technology."
         
         return response
     
     def _generate_search_response(self, papers_info: List[Dict], query: str) -> str:
         """Generate a search response based on the papers"""
         if not papers_info:
-            return "Я не нашел статей, соответствующих вашему запросу."
+            return "I couldn't find any papers matching your query."
         
-        response = f"Результаты поиска по запросу '{query}':\n\n"
+        response = f"Search results for '{query}':\n\n"
         
         for i, paper in enumerate(papers_info):
             response += f"{i+1}. **{paper['title']}**\n"
-            response += f"   Авторы: {paper['authors']}\n"
-            response += f"   Краткое описание: {paper['abstract']}\n\n"
+            response += f"   Authors: {paper['authors']}\n"
+            response += f"   Brief description: {paper['abstract']}\n\n"
         
         return response
     
     def _generate_general_response(self, papers_info: List[Dict], query: str) -> str:
         """Generate a general response based on the papers"""
         if not papers_info:
-            return "Я не нашел статей, соответствующих вашему запросу."
+            return "I couldn't find any papers matching your query."
         
-        response = f"По вашему запросу '{query}' я нашел следующую информацию:\n\n"
+        response = f"For your query '{query}', I found the following information:\n\n"
         
         most_relevant_paper = papers_info[0]
-        response += f"Согласно статье \"{most_relevant_paper['title']}\" авторов {most_relevant_paper['authors']}, "
+        response += f"According to the paper \"{most_relevant_paper['title']}\" by {most_relevant_paper['authors']}, "
         response += f"{most_relevant_paper['abstract']}\n\n"
         
         if len(papers_info) > 1:
-            response += f"Также по этой теме найдено еще {len(papers_info) - 1} статей. "
-            response += "Вы можете уточнить запрос, чтобы получить более конкретную информацию."
+            response += f"Also found {len(papers_info) - 1} more papers on this topic. "
+            response += "You can refine your query to get more specific information."
         
         return response
     
@@ -176,7 +176,7 @@ class SimpleLLM(LLM):
         sentence_words = set(re.findall(r'\w+', sentence.lower()))
         
         # Remove common stop words
-        stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'about', 'как', 'что', 'и', 'в', 'на'}
+        stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'about'}
         query_words = query_words - stop_words
         
         # Check if there's significant overlap between query words and sentence words

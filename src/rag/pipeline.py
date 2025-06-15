@@ -20,7 +20,7 @@ class RAGPipeline:
         logger.info("RAG Pipeline initialized")
     
     def _retrieve(self, query: str, limit: int = 5) -> List[Document]:
-        """Получить релевантные документы из базы данных"""
+        """Retrieve relevant documents from the database"""
         start_time = metrics_collector.start_timer("rag_retrieval")
         
         try:
@@ -50,7 +50,7 @@ class RAGPipeline:
             metrics_collector.stop_timer("rag_retrieval", start_time)
     
     def _format_documents(self, documents: List[Document]) -> str:
-        """Форматировать документы для использования в промпте"""
+        """Format documents for use in prompt"""
         document_strings = []
         for i, doc in enumerate(documents):
             doc_string = f"[Document {i+1}]\n{doc.page_content}\n"
@@ -59,7 +59,7 @@ class RAGPipeline:
         return "\n\n".join(document_strings)
     
     def simple_search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """Простой поиск статей по запросу"""
+        """Simple search for papers based on query"""
         start_time = metrics_collector.start_timer("rag_simple_search")
         
         try:
@@ -71,48 +71,72 @@ class RAGPipeline:
             metrics_collector.stop_timer("rag_simple_search", start_time)
     
     def process_query(self, query: str, limit: int = 5) -> Dict[str, Any]:
-        """Единый метод для обработки запроса пользователя"""
+        """Unified method for processing user queries"""
         start_time = metrics_collector.start_timer("rag_process_query")
         
         try:
-            # Поиск релевантных статей
+            # Search for relevant papers
             papers = self.simple_search(query, limit)
             
-            # Получение документов для RAG
+            # Retrieve documents for RAG
             documents = self._retrieve(query, limit)
             
+            # Handle case when no relevant documents are found
             if not documents:
-                result = "Не удалось найти релевантные статьи по вашему запросу. Попробуйте изменить запрос или загрузить больше статей."
+                # Create fallback response that's helpful even without specific documents
+                fallback_prompt = """
+                You are a research assistant helping with scientific papers.
+                The user asked this question: {query}
+                
+                Unfortunately, no relevant research papers were found in the database for this query.
+                
+                Please provide:
+                1. A helpful response acknowledging the lack of specific papers
+                2. General information about the topic if possible
+                3. Suggestions for how the user might reformulate their query
+                4. Alternative research directions they might consider
+                
+                Make your response well-structured and informative even without specific papers to reference.
+                """
+                
+                formatted_prompt = fallback_prompt.format(query=query)
+                result = self.llm._call(formatted_prompt)
+                
                 return {
                     "papers": papers,
                     "query": query,
                     "result": result
                 }
             
-            # Форматирование документов для промпта
+            # Format documents for prompt
             formatted_docs = self._format_documents(documents)
             
-            # Создание промпта для LLM
+            # Create prompt for LLM
             prompt_template = """
-            Ты - исследовательский ассистент, помогающий с научными статьями.
-            Ответь на следующий запрос, основываясь ТОЛЬКО на предоставленных исследовательских статьях.
-            Если статьи не содержат информацию для прямого ответа на запрос, синтезируй то, что доступно,
-            и четко укажи, когда ты делаешь выводы за пределами того, что есть в статьях.
+            You are a research assistant helping with scientific papers.
+            Answer the following query based ONLY on the provided research papers.
+            If the papers don't contain information for a direct answer to the query, synthesize what is available,
+            and clearly indicate when you are making inferences beyond what's in the papers.
             
-            Запрос: {query}
+            Query: {query}
             
-            Исследовательские статьи:
+            Research Papers:
             {documents}
             
-            Предоставь подробный и хорошо структурированный ответ, который напрямую отвечает на запрос.
-            Включи конкретные ссылки на статьи, когда это уместно.
+            Provide a detailed and well-structured response that directly addresses the query.
+            Include specific references to papers when appropriate.
+            Your response should:
+            1. Summarize key findings relevant to the query
+            2. Present information in a logical, organized way with clear sections
+            3. Highlight areas of consensus and disagreement across papers if relevant
+            4. If the papers don't fully address the query, acknowledge this and provide insights based on what is available
             """
             
-            # Создание и запуск цепочки обработки
+            # Create and run processing chain
             chain_input = {"query": query, "documents": formatted_docs}
             prompt = prompt_template.format(**chain_input)
             
-            # Генерация ответа с помощью LLM
+            # Generate response using LLM
             result = self.llm._call(prompt)
             
             return {
@@ -126,28 +150,43 @@ class RAGPipeline:
             return {
                 "papers": [],
                 "query": query,
-                "result": f"Произошла ошибка при обработке запроса: {str(e)}"
+                "result": f"An error occurred while processing the query: {str(e)}"
             }
             
         finally:
             metrics_collector.stop_timer("rag_process_query", start_time)
     
     def process_single_paper(self, paper_id: str, query: str) -> Dict[str, Any]:
-        """Обработка запроса по конкретной статье"""
+        """Process query for a specific paper"""
         start_time = metrics_collector.start_timer("rag_process_single_paper")
         
         try:
-            # Получение статьи по ID
+            # Get paper by ID
             paper = self.weaviate_manager.get_paper_by_id(paper_id)
             
             if not paper:
+                # Create structured response for when paper is not found
+                not_found_prompt = f"""
+                You are a research assistant helping with scientific papers.
+                The user asked about paper with ID {paper_id} with this query: {query}
+                
+                Unfortunately, the requested paper could not be found in the database.
+                
+                Please provide a helpful response that:
+                1. Acknowledges the paper was not found
+                2. Suggests alternatives for finding this paper (like searching on arXiv directly)
+                3. Offers guidance on how to use the system more effectively
+                """
+                
+                result = self.llm._call(not_found_prompt)
+                
                 return {
                     "paper": None,
                     "query": query,
-                    "result": f"Статья с ID {paper_id} не найдена."
+                    "result": result
                 }
             
-            # Создание документа для RAG
+            # Create document for RAG
             content = f"Title: {paper.get('title', '')}\n"
             content += f"Abstract: {paper.get('abstract', '')}\n"
             content += f"Authors: {', '.join(paper.get('authors', []))}\n"
@@ -157,25 +196,30 @@ class RAGPipeline:
             if paper.get('content'):
                 content += f"\n\nContent: {paper.get('content')}"
             
-            # Создание промпта для LLM
+            # Create prompt for LLM
             prompt_template = """
-            Ты - исследовательский ассистент, помогающий с научными статьями.
-            Ответь на следующий запрос, основываясь ТОЛЬКО на предоставленной статье.
-            Если статья не содержит информацию для прямого ответа на запрос, укажи это.
+            You are a research assistant helping with scientific papers.
+            Answer the following query based ONLY on the provided paper.
+            If the paper doesn't contain information for a direct answer to the query, clearly indicate this.
             
-            Запрос: {query}
+            Query: {query}
             
-            Статья:
+            Paper:
             {content}
             
-            Предоставь подробный и хорошо структурированный ответ, который напрямую отвечает на запрос.
+            Provide a detailed and well-structured response that directly addresses the query.
+            Your response should:
+            1. Focus specifically on information from this paper relevant to the query
+            2. Be organized with clear sections and logical flow
+            3. Include specific references to sections or findings from the paper
+            4. If the paper doesn't address the query, provide a helpful explanation of what the paper does cover
             """
             
-            # Создание и запуск цепочки обработки
+            # Create and run processing chain
             chain_input = {"query": query, "content": content}
             prompt = prompt_template.format(**chain_input)
             
-            # Генерация ответа с помощью LLM
+            # Generate response using LLM
             result = self.llm._call(prompt)
             
             return {
@@ -189,7 +233,7 @@ class RAGPipeline:
             return {
                 "paper": None,
                 "query": query,
-                "result": f"Произошла ошибка при обработке запроса: {str(e)}"
+                "result": f"An error occurred while processing the query: {str(e)}"
             }
             
         finally:
