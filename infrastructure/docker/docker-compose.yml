@@ -1,58 +1,77 @@
-version: '3.8'
+version: '3'
 
 services:
-  weaviate:
-    image: semitechnologies/weaviate:1.31.1-e1b58e4.arm64
-    ports:
-      - "8080:8080"
-    environment:
-      QUERY_DEFAULTS_LIMIT: 25
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      DEFAULT_VECTORIZER_MODULE: 'none'
-      CLUSTER_HOSTNAME: 'node1'
-    volumes:
-      - weaviate_data:/var/lib/weaviate
-
-  app:
-    build: 
-      context: ../..
+  api:
+    build:
+      context: ../../
       dockerfile: infrastructure/docker/Dockerfile
     ports:
       - "8000:8000"
-    depends_on:
-      - weaviate
-      - prometheus
     environment:
       - WEAVIATE_URL=http://weaviate:8080
-    env_file:
-      - ../../.env
+    depends_on:
+      - weaviate
     volumes:
-      - ../../logs:/app/logs
+      - ../../data:/app/data
+
+  streamlit:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile
+    ports:
+      - "8501:8501"
+    command: python scripts/run_streamlit.py
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    volumes:
+      - ../../data:/app/data
+
+  weaviate:
+    image: semitechnologies/weaviate:1.22.4
+    ports:
+      - "8080:8080"
+    environment:
+      - QUERY_DEFAULTS_LIMIT=20
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: on-failure:0
+
+  scraper:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.scraper
+    environment:
+      - WEAVIATE_URL=http://weaviate:8080
+    volumes:
+      - ../../data:/app/data
+    depends_on:
+      - weaviate
+    # By default, the scraper doesn't start automatically
+    # Use "docker-compose up scraper" to run it manually
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.45.0
     ports:
       - "9090:9090"
     volumes:
-      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../../infrastructure/monitoring/prometheus:/etc/prometheus
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.1.0
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
+      - ../../infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../../infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana_data:/var/lib/grafana
-      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
 

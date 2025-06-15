@@ -19,4 +19,5 @@ RUN mkdir -p /app/logs && touch /app/logs/app.log
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the API server
+CMD ["python", "-m", "src.api.main", "--streamlit"]

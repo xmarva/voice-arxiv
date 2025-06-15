@@ -3,6 +3,7 @@ from typing import List
 from langchain.embeddings.base import Embeddings
 from transformers import AutoTokenizer, AutoModel
 import torch
+import numpy as np
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,18 @@ class CustomEmbeddings(Embeddings):
             with torch.no_grad():
                 model_output = self.model(**encoded_input)
             embeddings = self._mean_pooling(model_output, encoded_input['attention_mask'])
-            return embeddings.numpy().tolist()
+            embeddings_list = embeddings.numpy().tolist()
+            
+            # Ensure we have a list of lists of floats
+            result = []
+            for emb in embeddings_list:
+                if isinstance(emb, list):
+                    result.append([float(x) for x in emb])
+                else:
+                    # If somehow we got a single value, wrap it
+                    result.append([float(emb)])
+            
+            return result
         except Exception as e:
             logger.error(f"Error embedding documents: {e}")
             raise
@@ -52,10 +64,20 @@ class CustomEmbeddings(Embeddings):
             with torch.no_grad():
                 model_output = self.model(**encoded_input)
             embeddings = self._mean_pooling(model_output, encoded_input['attention_mask'])
-            return embeddings.numpy().tolist()
+            
+            # Convert to numpy, flatten, and then to list of floats
+            numpy_array = embeddings.numpy()
+            flattened = numpy_array.flatten()
+            result = [float(x) for x in flattened]
+            
+            logger.info(f"Generated embedding vector with {len(result)} dimensions")
+            return result
         except Exception as e:
             logger.error(f"Error embedding query: {e}")
-            raise
+            # Return a default embedding vector in case of error
+            default_dim = 384  # Default dimension for all-MiniLM-L6-v2
+            logger.warning(f"Returning default embedding vector with {default_dim} dimensions")
+            return [0.0] * default_dim
 
 def get_embeddings() -> CustomEmbeddings:
     return CustomEmbeddings()

@@ -1,5 +1,7 @@
 # Research AI Assistant
 
+![Home Screen](imgs/home.png)
+
 Research paper analysis and discovery system using LangChain, Weaviate, and custom LLM models. This is a project with a focus on infrastructure design, monitoring and metrics.
 
 ## Quick Start
@@ -57,6 +59,8 @@ GRAFANA_PORT=3000
 ```
 
 ## Development
+
+![Search Interface](imgs/search.png)
 
 ### Project Structure
 
