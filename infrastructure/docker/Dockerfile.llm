@@ -1,0 +1,30 @@
+FROM vllm/vllm-openai:latest
+
+WORKDIR /app
+
+# Install additional dependencies
+RUN pip install --no-cache-dir \
+    vllm \
+    bitsandbytes \
+    accelerate \
+    optimum \
+    scipy \
+    llama-cpp-python  # For CPU-only fallback
+
+# Set environment variables for better GPU utilization
+ENV CUDA_VISIBLE_DEVICES=0
+ENV VLLM_USE_TENSOR_PARALLEL=True
+
+# Copy the entrypoint script
+COPY infrastructure/docker/llm_entrypoint.sh /app/entrypoint.sh
+
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
+
+# We'll mount models from the host, so no need to download them here
+
+# Expose the OpenAI-compatible API port
+EXPOSE 8001
+
+# Set the entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"] 

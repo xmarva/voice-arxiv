@@ -44,6 +44,8 @@ class RAGPipeline:
                 
                 documents.append(Document(page_content=content, metadata=metadata))
             
+            # Log the number of documents retrieved
+            logger.info(f"Retrieved {len(documents)} documents for query: {query[:100]}...")
             return documents
         
         finally:
@@ -51,12 +53,30 @@ class RAGPipeline:
     
     def _format_documents(self, documents: List[Document]) -> str:
         """Format documents for use in prompt"""
+        if not documents:
+            return "No relevant documents found."
+            
         document_strings = []
+        
+        # Ensure we process and format all documents
         for i, doc in enumerate(documents):
+            # Format each document with clear separation and numbering
             doc_string = f"[Document {i+1}]\n{doc.page_content}\n"
+            
+            # Add similarity score if available
+            if "similarity" in doc.metadata:
+                sim_percentage = doc.metadata["similarity"] * 100
+                doc_string += f"Relevance: {sim_percentage:.1f}%\n"
+                
             document_strings.append(doc_string)
         
-        return "\n\n".join(document_strings)
+        # Join all formatted documents with clear separation
+        formatted_docs = "\n\n".join(document_strings)
+        
+        # Log formatting information
+        logger.info(f"Formatted {len(documents)} documents for LLM processing")
+        
+        return formatted_docs
     
     def simple_search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Simple search for papers based on query"""
@@ -97,6 +117,7 @@ class RAGPipeline:
                 4. Alternative research directions they might consider
                 
                 Make your response well-structured and informative even without specific papers to reference.
+                Format your response with markdown headings and bullet points for readability.
                 """
                 
                 formatted_prompt = fallback_prompt.format(query=query)
@@ -110,6 +131,7 @@ class RAGPipeline:
             
             # Format documents for prompt
             formatted_docs = self._format_documents(documents)
+            logger.info(f"Documents formatted successfully, length: {len(formatted_docs)} chars")
             
             # Create prompt for LLM
             prompt_template = """
@@ -127,17 +149,26 @@ class RAGPipeline:
             Include specific references to papers when appropriate.
             Your response should:
             1. Summarize key findings relevant to the query
-            2. Present information in a logical, organized way with clear sections
+            2. Present information in a logical, organized way with clear sections using markdown headings
             3. Highlight areas of consensus and disagreement across papers if relevant
             4. If the papers don't fully address the query, acknowledge this and provide insights based on what is available
+            
+            Format your response with proper markdown for readability:
+            - Use headings (# Main Heading, ## Subheading)
+            - Use bullet points where appropriate
+            - Emphasize important terms with **bold** text
+            - Include paper citations like "[Paper X]" where X is the document number
             """
             
             # Create and run processing chain
             chain_input = {"query": query, "documents": formatted_docs}
             prompt = prompt_template.format(**chain_input)
             
+            logger.info(f"Generated prompt for LLM, length: {len(prompt)} chars")
+            
             # Generate response using LLM
             result = self.llm._call(prompt)
+            logger.info(f"LLM generated response successfully, length: {len(result)} chars")
             
             return {
                 "papers": papers,
@@ -176,6 +207,8 @@ class RAGPipeline:
                 1. Acknowledges the paper was not found
                 2. Suggests alternatives for finding this paper (like searching on arXiv directly)
                 3. Offers guidance on how to use the system more effectively
+                
+                Format your response with markdown headings and bullet points for readability.
                 """
                 
                 result = self.llm._call(not_found_prompt)
@@ -210,9 +243,14 @@ class RAGPipeline:
             Provide a detailed and well-structured response that directly addresses the query.
             Your response should:
             1. Focus specifically on information from this paper relevant to the query
-            2. Be organized with clear sections and logical flow
+            2. Be organized with clear sections and logical flow using markdown headings
             3. Include specific references to sections or findings from the paper
             4. If the paper doesn't address the query, provide a helpful explanation of what the paper does cover
+            
+            Format your response with proper markdown for readability:
+            - Use headings (# Main Heading, ## Subheading)
+            - Use bullet points where appropriate
+            - Emphasize important terms with **bold** text
             """
             
             # Create and run processing chain

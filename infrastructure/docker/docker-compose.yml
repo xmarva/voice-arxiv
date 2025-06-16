@@ -9,8 +9,10 @@ services:
       - "8000:8000"
     environment:
       - WEAVIATE_URL=http://weaviate:8080
+      - LOCAL_LLM_URL=http://llm-service:8001
     depends_on:
       - weaviate
+      - llm-service
     volumes:
       - ../../data:/app/data
 
@@ -38,6 +40,29 @@ services:
       - PERSISTENCE_DATA_PATH=/var/lib/weaviate
     volumes:
       - weaviate_data:/var/lib/weaviate
+    restart: on-failure:0
+
+  llm-service:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.llm
+    ports:
+      - "8001:8001"
+    environment:
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-mistral-7b-instruct-v0.2-q4_0}
+      - LOCAL_LLM_PORT=8001
+      - GPU_MEMORY_UTILIZATION=0.9
+      - QUANTIZATION=awq
+      - DEVICE=${DEVICE:-cuda}  # 'cuda' for GPU, 'cpu' for CPU-only
+    volumes:
+      - ${LLM_MODELS_PATH:-../../models}:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
     restart: on-failure:0
 
   scraper:

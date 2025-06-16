@@ -11,9 +11,13 @@ from src.monitoring.metrics import track_rag_pipeline
 from src.database.data_loader import load_data
 from src.rag.pipeline import get_rag_pipeline
 from src.config.settings import settings
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+# Create a thread pool for handling synchronous operations
+thread_executor = ThreadPoolExecutor(max_workers=4)
 
 class SearchRequest(BaseModel):
     query: str
@@ -59,7 +63,12 @@ async def search_papers(request: SearchRequest):
     """Search and analyze papers based on user query"""
     try:
         rag_pipeline = get_rag_pipeline()
-        result = rag_pipeline.process_query(request.query, request.limit)
+        
+        # Run the synchronous process_query in a thread pool to avoid blocking
+        result = await asyncio.get_event_loop().run_in_executor(
+            thread_executor,
+            lambda: rag_pipeline.process_query(request.query, request.limit)
+        )
         
         return SearchResponse(
             papers=result["papers"],
@@ -81,7 +90,12 @@ async def query_paper(request: PaperQueryRequest):
     """Query a specific paper"""
     try:
         rag_pipeline = get_rag_pipeline()
-        result = rag_pipeline.process_single_paper(request.paper_id, request.query)
+        
+        # Run the synchronous process_single_paper in a thread pool
+        result = await asyncio.get_event_loop().run_in_executor(
+            thread_executor,
+            lambda: rag_pipeline.process_single_paper(request.paper_id, request.query)
+        )
         
         return PaperQueryResponse(
             paper=result["paper"],

@@ -1,25 +1,32 @@
 import logging
 import os
-import re
-from typing import Optional, List, Dict, Any
+import requests
+from typing import Optional, List, Dict, Any, Union
+
 from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
+
 from src.config.settings import settings
 from src.monitoring.metrics import metrics_collector
 
 logger = logging.getLogger(__name__)
 
-class SimpleLLM(LLM):
-    """A simple rule-based LLM that doesn't require API keys or GPU"""
-    model_name: str = "simple-local-llm"
+class OpenAILLM(LLM):
+    """LLM implementation using OpenAI API"""
+    model_name: str = None
+    api_key: str = None  # Define api_key as a class attribute
     
     def __init__(self):
         super().__init__()
-        logger.info("Initialized Simple Local LLM")
+        self.model_name = settings.openai_model_name
+        self.api_key = settings.openai_api_key  # Assign to instance attribute
+        if not self.api_key:
+            logger.warning("OpenAI API key not found in settings. Set OPENAI_API_KEY in .env file.")
+        logger.info(f"Initialized OpenAI LLM with model: {self.model_name}")
     
     @property
     def _llm_type(self) -> str:
-        return "simple_local_llm"
+        return "openai"
     
     def _call(
         self,
@@ -28,161 +35,145 @@ class SimpleLLM(LLM):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs
     ) -> str:
-        """Generate a response based on simple rules and pattern matching"""
+        """Call the OpenAI API to generate a response"""
         start_time = metrics_collector.start_timer("llm_inference_time")
         
         try:
-            # Extract the query from the prompt
-            query_match = re.search(r"Query: (.*?)(?:\n\n|$)", prompt, re.DOTALL)
-            query = query_match.group(1).strip() if query_match else "Unknown query"
+            import openai
+            client = openai.OpenAI(api_key=self.api_key)  # Use client with api_key
             
-            # Extract paper information from the prompt
-            papers_info = []
-            paper_sections = re.findall(r"\[Document \d+\](.*?)(?=\[Document \d+\]|\Z)", prompt, re.DOTALL)
+            messages = [
+                {"role": "system", "content": "You are a helpful research assistant."},
+                {"role": "user", "content": prompt}
+            ]
             
-            for section in paper_sections:
-                title_match = re.search(r"Title: (.*?)(?:\n|$)", section)
-                title = title_match.group(1) if title_match else "Unknown title"
-                
-                abstract_match = re.search(r"Abstract: (.*?)(?:\n[A-Z]|$)", section, re.DOTALL)
-                abstract = abstract_match.group(1).strip() if abstract_match else "No abstract available"
-                
-                authors_match = re.search(r"Authors: (.*?)(?:\n|$)", section)
-                authors = authors_match.group(1) if authors_match else "Unknown authors"
-                
-                papers_info.append({
-                    "title": title,
-                    "abstract": abstract[:100] + "..." if len(abstract) > 100 else abstract,
-                    "authors": authors
-                })
+            response = client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                max_tokens=2048,
+                temperature=0.2,
+                stop=stop or None,
+            )
             
-            # Generate a response based on the query and papers
-            if "summarize" in query.lower() or "summary" in query.lower():
-                response = self._generate_summary_response(papers_info, query)
-            elif "explain" in query.lower() or "what is" in query.lower() or "how" in query.lower():
-                response = self._generate_explanation_response(papers_info, query)
-            elif "compare" in query.lower() or "difference" in query.lower():
-                response = self._generate_comparison_response(papers_info, query)
-            elif "find" in query.lower() or "search" in query.lower():
-                response = self._generate_search_response(papers_info, query)
-            else:
-                response = self._generate_general_response(papers_info, query)
+            result = response.choices[0].message.content
+            
+            # Log token usage for monitoring
+            if hasattr(response, 'usage') and response.usage:
+                prompt_tokens = response.usage.prompt_tokens
+                completion_tokens = response.usage.completion_tokens
+                total_tokens = response.usage.total_tokens
+                
+                logger.info(f"OpenAI token usage: {prompt_tokens} prompt, {completion_tokens} completion, {total_tokens} total")
+                metrics_collector.track_token_usage(prompt_tokens, completion_tokens, total_tokens)
             
             metrics_collector.stop_timer("llm_inference_time", start_time)
-            return response
+            return result
             
         except Exception as e:
-            logger.error(f"Error generating response: {e}")
+            logger.error(f"Error calling OpenAI API: {e}")
             metrics_collector.stop_timer("llm_inference_time", start_time)
-            return "I'm sorry, I couldn't generate a response to your query. Please try rephrasing your question."
+            return f"Error: Could not generate response from OpenAI API. Details: {str(e)}"
+
+
+class LocalLLM(LLM):
+    """LLM implementation using local vLLM server"""
+    model_name: str = None
+    url: str = None  # Define url as a class attribute
     
-    def _generate_summary_response(self, papers_info: List[Dict], query: str) -> str:
-        """Generate a summary response based on the papers"""
-        if not papers_info:
-            return "I couldn't find any papers matching your query."
-        
-        response = f"Based on the found papers, here's a brief summary for your query '{query}':\n\n"
-        
-        for i, paper in enumerate(papers_info[:3]):  # Limit to first 3 papers
-            response += f"**Paper {i+1}: {paper['title']}**\n"
-            response += f"{paper['abstract']}\n\n"
-        
-        if len(papers_info) > 3:
-            response += f"Also found {len(papers_info) - 3} more papers on this topic.\n"
-        
-        return response
+    def __init__(self):
+        super().__init__()
+        self.model_name = settings.local_llm_model
+        self.url = settings.local_llm_url
+        logger.info(f"Initialized Local LLM with model: {self.model_name} at {self.url}")
     
-    def _generate_explanation_response(self, papers_info: List[Dict], query: str) -> str:
-        """Generate an explanation response based on the papers"""
-        if not papers_info:
-            return "I couldn't find any papers that could help explain your query."
-        
-        response = f"Here's an explanation for your query '{query}', based on scientific papers:\n\n"
-        
-        # Extract relevant sentences from abstracts that might contain explanations
-        explanations = []
-        for paper in papers_info:
-            abstract = paper["abstract"]
-            sentences = re.split(r'(?<=[.!?])\s+', abstract)
-            relevant_sentences = [s for s in sentences if self._is_relevant_to_query(s, query)]
-            if relevant_sentences:
-                explanations.extend(relevant_sentences)
-        
-        if explanations:
-            response += "\n".join(explanations[:5])  # Limit to first 5 relevant sentences
-            response += f"\n\nThis explanation is based on the paper \"{papers_info[0]['title']}\" by {papers_info[0]['authors']}."
-        else:
-            # If no relevant sentences found, use the first paper's abstract
-            response += f"{papers_info[0]['abstract']}\n\n"
-            response += f"This information is from the paper \"{papers_info[0]['title']}\" by {papers_info[0]['authors']}."
-        
-        return response
+    @property
+    def _llm_type(self) -> str:
+        return "local_vllm"
     
-    def _generate_comparison_response(self, papers_info: List[Dict], query: str) -> str:
-        """Generate a comparison response based on the papers"""
-        if len(papers_info) < 2:
-            return "At least two papers are needed for comparison. Please refine your query."
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs
+    ) -> str:
+        """Call the local vLLM server to generate a response"""
+        start_time = metrics_collector.start_timer("llm_inference_time")
         
-        response = f"Comparison for your query '{query}':\n\n"
-        
-        response += f"**Paper 1: {papers_info[0]['title']}**\n"
-        response += f"Authors: {papers_info[0]['authors']}\n"
-        response += f"Main ideas: {papers_info[0]['abstract']}\n\n"
-        
-        response += f"**Paper 2: {papers_info[1]['title']}**\n"
-        response += f"Authors: {papers_info[1]['authors']}\n"
-        response += f"Main ideas: {papers_info[1]['abstract']}\n\n"
-        
-        response += "**Comparison:**\n"
-        response += "Both papers are related to artificial intelligence research but have different approaches and focus. "
-        response += "The first paper concentrates more on theoretical aspects, while the second offers practical applications of the technology."
-        
-        return response
+        try:
+            # Format prompt for the specific model
+            formatted_prompt = self._format_prompt_for_model(prompt)
+            
+            # Prepare request payload for OpenAI-compatible API
+            payload = {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "user", "content": formatted_prompt}
+                ],
+                "max_tokens": 2048,
+                "temperature": 0.2,
+            }
+            
+            if stop:
+                payload["stop"] = stop
+            
+            # Call vLLM OpenAI-compatible API
+            response = requests.post(
+                f"{self.url}/v1/chat/completions",
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=120  # 120 second timeout for long generations
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Error from vLLM server: {response.status_code}, {response.text}")
+                raise Exception(f"vLLM server error: {response.status_code}")
+            
+            # Parse response
+            response_data = response.json()
+            
+            # Extract generated text from OpenAI format response
+            if "choices" in response_data and len(response_data["choices"]) > 0:
+                result = response_data["choices"][0]["message"]["content"]
+            else:
+                logger.error(f"Unexpected response format from vLLM: {response_data}")
+                result = "Error: Unexpected response format from LLM server"
+            
+            metrics_collector.stop_timer("llm_inference_time", start_time)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error calling local LLM: {e}")
+            metrics_collector.stop_timer("llm_inference_time", start_time)
+            
+            # Check if vLLM server is running
+            try:
+                health_check = requests.get(f"{self.url}/health", timeout=5)
+                if health_check.status_code != 200:
+                    return "Error: Local LLM server is not responding properly. Please check the server status."
+            except:
+                return "Error: Cannot connect to the local LLM server. Please ensure the server is running."
+                
+            return f"Error: Could not generate response from local LLM. Details: {str(e)}"
     
-    def _generate_search_response(self, papers_info: List[Dict], query: str) -> str:
-        """Generate a search response based on the papers"""
-        if not papers_info:
-            return "I couldn't find any papers matching your query."
-        
-        response = f"Search results for '{query}':\n\n"
-        
-        for i, paper in enumerate(papers_info):
-            response += f"{i+1}. **{paper['title']}**\n"
-            response += f"   Authors: {paper['authors']}\n"
-            response += f"   Brief description: {paper['abstract']}\n\n"
-        
-        return response
-    
-    def _generate_general_response(self, papers_info: List[Dict], query: str) -> str:
-        """Generate a general response based on the papers"""
-        if not papers_info:
-            return "I couldn't find any papers matching your query."
-        
-        response = f"For your query '{query}', I found the following information:\n\n"
-        
-        most_relevant_paper = papers_info[0]
-        response += f"According to the paper \"{most_relevant_paper['title']}\" by {most_relevant_paper['authors']}, "
-        response += f"{most_relevant_paper['abstract']}\n\n"
-        
-        if len(papers_info) > 1:
-            response += f"Also found {len(papers_info) - 1} more papers on this topic. "
-            response += "You can refine your query to get more specific information."
-        
-        return response
-    
-    def _is_relevant_to_query(self, sentence: str, query: str) -> bool:
-        """Check if a sentence is relevant to the query"""
-        query_words = set(re.findall(r'\w+', query.lower()))
-        sentence_words = set(re.findall(r'\w+', sentence.lower()))
-        
-        # Remove common stop words
-        stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'about'}
-        query_words = query_words - stop_words
-        
-        # Check if there's significant overlap between query words and sentence words
-        overlap = query_words.intersection(sentence_words)
-        return len(overlap) >= 1  # At least one significant word should match
+    def _format_prompt_for_model(self, prompt: str) -> str:
+        """Format the prompt according to model requirements"""
+        # No special formatting needed since we're using the OpenAI chat completions API format
+        return prompt
+
 
 def get_llm() -> LLM:
-    """Factory function to get the LLM"""
-    return SimpleLLM()
+    """Factory function to get the configured LLM"""
+    try:
+        if settings.is_using_openai:
+            logger.info("Using OpenAI API for LLM")
+            return OpenAILLM()
+        elif settings.is_using_local_model:
+            logger.info("Using local vLLM for LLM")
+            return LocalLLM()
+        else:
+            logger.warning(f"Unknown LLM type: {settings.llm_type}. Defaulting to OpenAI.")
+            return OpenAILLM()
+    except Exception as e:
+        logger.error(f"Error initializing LLM: {e}. Using fallback implementation.")
+        return OpenAILLM()  # Default to OpenAI as fallback
